@@ -20,7 +20,7 @@ namespace SkillMazowieckieRailways.Tests
 
 
             var request = new Alexa.NET.Request.SkillRequest();
-            request.Request 
+             
 
 
             var function = new Function();

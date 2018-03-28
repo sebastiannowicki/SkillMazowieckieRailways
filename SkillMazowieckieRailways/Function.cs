@@ -9,6 +9,9 @@ using Alexa.NET.Request.Type;
 using Alexa.NET.Response;
 using Amazon.Lambda.Core;
 
+using NodaTime;
+
+
 // Assembly attribute to enable the Lambda function's JSON input to be converted into a .NET class.
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.Json.JsonSerializer))]
 
@@ -59,17 +62,22 @@ namespace SkillMazowieckieRailways
                     return MakeSkillResponse($"Train to Warsaw is at {trains[0]}. Next is at {trains[1]}", true);
                 }
             }
+
+            else if (requestType == typeof(IntentRequest) && (input.Request as IntentRequest).Intent.Name == "GetLocalTime")
+            {
+                var localTime = GetWarsawTime();
+                return MakeSkillResponse($"LocalTime is {localTime.hour}:{localTime.minute}, date is {localTime.dateFormatted}", true);         
+            }
             return MakeSkillResponse($"I don't know how to handle this intent. Please say something like Alexa, ask {INVOCATION_NAME} when next train to Warsaw.", true);
         }
 
         private async Task<List<string>> GetTrains(ILambdaContext context)
         {
-            var polishDate = DateTime.Now.AddHours(6);
-            //var polishTime = await GetPolishTime(context);
+            var polishTime = GetWarsawTime();
 
-            var date = polishDate.ToString("yyyy-MM-dd");
-            var hours = polishDate.Hour;
-            var minutes = polishDate.Minute;
+            var date = polishTime.dateFormatted;
+            var hours = polishTime.hour;
+            var minutes = polishTime.minute;
             List<string> trains = new List<string>();
 
             string req =
@@ -123,35 +131,16 @@ namespace SkillMazowieckieRailways
             return skillResponse;
         }
 
-        private async Task<(string hour, string minutes)> GetPolishTime(ILambdaContext context)
+        private (string dateFormatted, string hour, string minute) GetWarsawTime()
         {
-            try
-            {
-                var _httpClient = new HttpClient();
-                _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.94 Safari/537.36");
-                _httpClient.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8");
-                _httpClient.DefaultRequestHeaders.Add("Accept-Encoding", "gzip, deflate, br");
-                _httpClient.DefaultRequestHeaders.Add("Accept-Language", "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7");
-                _httpClient.DefaultRequestHeaders.Add("Cache-Control", "max-age=0");
-                _httpClient.DefaultRequestHeaders.Add("Connection", "keep-alive");
-                _httpClient.DefaultRequestHeaders.Add("Host", "www.worldtimeserver.com");
-                _httpClient.DefaultRequestHeaders.Add("Upgrade-Insecure-Requests", "1");
-                var uri = new Uri("https://www.worldtimeserver.com/current_time_in_PL.aspx");
-                var response = await _httpClient.GetStringAsync(uri);
-                Regex re = new Regex(
-                    "<span id=\"theTime\" class=\"fontTS\">(?:\\s*?)(\\d\\d:\\d\\d:\\d\\d)(?:\\s*?)</span>",
-                    RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant);
-                var m = re.Match(response);
-                string time = m.Groups[1].Value;
-                var split = time.Split(':');
-                return (hour: split[0], minutes: split[1]);
-                //return (hour: "14", minutes: "20");
-            }
-            catch (Exception ex)
-            {
-                context.Logger.LogLine($"\nException: {ex.Message}");
-                throw;
-            }
-        }
+            var nowTime = DateTime.Now;
+            var localDateTime = new LocalDateTime(nowTime.Year, nowTime.Month, nowTime.Day, nowTime.Hour, nowTime.Minute, nowTime.Second);
+            DateTimeZone zone = DateTimeZoneProviders.Tzdb["Europe/Warsaw"];
+            var clock = SystemClock.Instance.GetCurrentInstant().InZone(zone);
+            var today = clock.LocalDateTime;
+            var dateFormatted = new DateTime(today.Year, today.Month, today.Day).ToString("yyyy-MM-dd");
+
+            return (dateFormatted: dateFormatted,  hour: today.Hour.ToString(), minute: today.Minute.ToString());
+        }        
     }
 }
